@@ -32,6 +32,22 @@ struct beman::net::detail::poll_record final {
 // ----------------------------------------------------------------------------
 
 struct beman::net::detail::poll_context final : ::beman::net::detail::context_base {
+#ifdef _MSC_VER
+    // On Windows, Winsock must be initialised before any socket call.
+    // This RAII guard calls WSAStartup on construction and WSACleanup on
+    // destruction, tying the Winsock lifetime to the poll_context object.
+    struct wsa_guard {
+        wsa_guard() {
+            ::WSADATA wd{};
+            if (::WSAStartup(MAKEWORD(2, 2), &wd) != 0)
+                throw ::std::system_error(::WSAGetLastError(), ::std::system_category(), "WSAStartup failed");
+        }
+        ~wsa_guard() { ::WSACleanup(); }
+        wsa_guard(const wsa_guard&)            = delete;
+        wsa_guard& operator=(const wsa_guard&) = delete;
+    } d_wsa; // constructed first, destroyed last
+#endif
+
     using time_t       = ::std::chrono::system_clock::time_point;
     using timer_node_t = ::beman::net::detail::context_base::resume_at_operation;
     struct get_time {
