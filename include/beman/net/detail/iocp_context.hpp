@@ -569,7 +569,15 @@ struct beman::net::detail::iocp_context final : ::beman::net::detail::context_ba
         op->work = [](::beman::net::detail::context_base& ctx,
                       ::beman::net::detail::io_base*      base) -> ::beman::net::detail::submit_result {
             auto& iocp_ctx = static_cast<iocp_context&>(ctx);
-            ::setsockopt(iocp_ctx.socket_of(base->id), SOL_SOCKET, SO_UPDATE_CONNECT_CONTEXT, nullptr, 0);
+
+            // Explicitly cast nullptr to const char* to avoid an ambiguous overload (C2668).
+            // platform.hpp provides a POSIX-compatible setsockopt taking const void*, which
+            // conflicts with the native Winsock version (const char*) when passing nullptr.
+            ::setsockopt(iocp_ctx.socket_of(base->id),
+                         SOL_SOCKET,
+                         SO_UPDATE_CONNECT_CONTEXT,
+                         static_cast<const char*>(nullptr),
+                         0);
             base->complete();
             return ::beman::net::detail::submit_result::ready;
         };
