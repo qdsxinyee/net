@@ -133,7 +133,16 @@ class beman::net::ip::address_v6 {
 
     constexpr address_v6() noexcept;
     constexpr address_v6(const address_v6&) noexcept = default;
-    constexpr address_v6(const unsigned char (&addr)[16]) noexcept { ::std::memcpy(d_bytes.data(), addr, 16); }
+    constexpr address_v6(const unsigned char (&addr)[16]) noexcept {
+        // std::memcpy is not constexpr on MSVC; use an explicit loop which is
+        // constexpr on all three platforms under C++20 and later.
+#ifdef _MSC_VER
+        for (int i = 0; i < 16; ++i)
+            d_bytes[i] = addr[i];
+#else
+        ::std::memcpy(d_bytes.data(), addr, 16);
+#endif
+    }
 
     auto           operator=(const address_v6&) noexcept -> address_v6& = default;
     constexpr auto operator==(const address_v6&) const -> bool          = default;

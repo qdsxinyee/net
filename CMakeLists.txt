@@ -25,6 +25,10 @@ if(LINUX)
     option(BEMAN_NET_WITH_URING "Enable liburing io context" OFF)
 endif()
 
+if(WIN32)
+    option(BEMAN_NET_WITH_IOCP "Enable IOCP io context (Windows only). Default: OFF. Values: { ON, OFF }." OFF)
+endif()
+
 include(FetchContent)
 
 FetchContent_Declare(

@@ -24,6 +24,7 @@ target_sources(
                 ${PROJECT_SOURCE_DIR}/include/beman/net/detail/into_expected.hpp
                 ${PROJECT_SOURCE_DIR}/include/beman/net/detail/netfwd.hpp
                 ${PROJECT_SOURCE_DIR}/include/beman/net/detail/poll_context.hpp
+                ${PROJECT_SOURCE_DIR}/include/beman/net/detail/iocp_context.hpp
                 ${PROJECT_SOURCE_DIR}/include/beman/net/detail/container.hpp
                 ${PROJECT_SOURCE_DIR}/include/beman/net/detail/basic_stream_socket.hpp
                 ${PROJECT_SOURCE_DIR}/include/beman/net/detail/security_props.hpp
@@ -84,4 +85,21 @@ if(LINUX AND BEMAN_NET_WITH_URING)
         ${PROJECT_NAME}_headers
         INTERFACE BEMAN_NET_USE_URING
     )
+endif()
+
+if(WIN32)
+    # Always link ws2_32 on Windows: even the poll backend needs WinSock2.
+    # mswsock provides AcceptEx, ConnectEx, WSARecvMsg, WSASendMsg.
+    target_link_libraries(
+        ${PROJECT_NAME}_headers
+        INTERFACE
+            ws2_32
+            mswsock
+    )
+    if(BEMAN_NET_WITH_IOCP)
+        target_compile_definitions(
+            ${PROJECT_NAME}_headers
+            INTERFACE BEMAN_NET_USE_IOCP
+        )
+    endif()
 endif()

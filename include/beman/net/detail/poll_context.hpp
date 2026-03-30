@@ -46,18 +46,29 @@ struct beman::net::detail::poll_context final : ::beman::net::detail::context_ba
 
     auto make_socket(int fd) -> ::beman::net::detail::socket_id override final { return this->d_sockets.insert(fd); }
     auto make_socket(int d, int t, int p, ::std::error_code& error) -> ::beman::net::detail::socket_id override final {
+        // ::socket() returns SOCKET (ULONG_PTR) on Windows and int on POSIX.
+        // INVALID_SOCKET / -1 are the respective failure sentinels.
+#ifdef _MSC_VER
+        ::SOCKET fd(::socket(d, t, p));
+        if (fd == INVALID_SOCKET) {
+            error = ::std::error_code(sock_errno(), ::std::system_category());
+            return ::beman::net::detail::socket_id::invalid;
+        }
+        return this->make_socket(static_cast<int>(fd)); // narrowing is safe: stored as native_handle_type
+#else
         int fd(::socket(d, t, p));
         if (fd < 0) {
-            error = ::std::error_code(errno, ::std::system_category());
+            error = ::std::error_code(sock_errno(), ::std::system_category());
             return ::beman::net::detail::socket_id::invalid;
         }
         return this->make_socket(fd);
+#endif
     }
     auto release(::beman::net::detail::socket_id id, ::std::error_code& error) -> void override final {
         ::beman::net::detail::native_handle_type handle(this->d_sockets[id].handle);
         this->d_sockets.erase(id);
         if (::close(handle) < 0) {
-            error = ::std::error_code(errno, ::std::system_category());
+            error = ::std::error_code(sock_errno(), ::std::system_category());
         }
     }
     auto native_handle(::beman::net::detail::socket_id id) -> ::beman::net::detail::native_handle_type override final {
@@ -70,19 +81,19 @@ struct beman::net::detail::poll_context final : ::beman::net::detail::context_ba
                     ::socklen_t                     size,
                     ::std::error_code&              error) -> void override final {
         if (::setsockopt(this->native_handle(id), level, name, data, size) < 0) {
-            error = ::std::error_code(errno, ::std::system_category());
+            error = ::std::error_code(sock_errno(), ::std::system_category());
         }
     }
     auto bind(::beman::net::detail::socket_id       id,
               const ::beman::net::detail::endpoint& endpoint,
               ::std::error_code&                    error) -> void override final {
         if (::bind(this->native_handle(id), endpoint.data(), endpoint.size()) < 0) {
-            error = ::std::error_code(errno, ::std::system_category());
+            error = ::std::error_code(sock_errno(), ::std::system_category());
         }
     }
     auto listen(::beman::net::detail::socket_id id, int no, ::std::error_code& error) -> void override final {
         if (::listen(this->native_handle(id), no) < 0) {
-            error = ::std::error_code(errno, ::std::system_category());
+            error = ::std::error_code(sock_errno(), ::std::system_category());
         }
     }
 
@@ -132,7 +143,9 @@ struct beman::net::detail::poll_context final : ::beman::net::detail::context_ba
             }(this->d_poll.size()));
             int    rc(::poll(this->d_poll.data(), sz, timeout));
             if (rc < 0) {
-                switch (errno) {
+                // sock_errno() maps to WSAGetLastError() on Windows, errno on POSIX.
+                // EINTR / EAGAIN macros are mapped to their WSA equivalents in platform.hpp.
+                switch (sock_errno()) {
                 default:
                     return ::std::size_t();
                 case EINTR:
@@ -170,7 +183,12 @@ struct beman::net::detail::poll_context final : ::beman::net::detail::context_ba
             if (bool(completion->event & ::beman::net::event_type::out)) {
                 events |= POLLOUT;
             }
-            this->d_poll.emplace_back(::pollfd{this->native_handle(id), events, short()});
+            // this->d_poll.emplace_back(::pollfd{this->native_handle(id), events, short()});
+            //  pollfd::fd is int on POSIX and SOCKET (ULONG_PTR) on Windows.
+            //  Cast through the actual field type to avoid narrowing warnings on
+            //  both platforms without introducing a #ifdef here.
+            this->d_poll.emplace_back(
+                ::pollfd{static_cast<decltype(::pollfd{}.fd)>(this->native_handle(id)), events, short()});
             this->d_outstanding.emplace_back(completion);
             this->wakeup();
             return ::beman::net::detail::submit_result::submit;
@@ -208,9 +226,9 @@ struct beman::net::detail::poll_context final : ::beman::net::detail::context_ba
                     cmp.complete();
                     return ::beman::net::detail::submit_result::ready;
                 } else {
-                    switch (errno) {
+                    switch (sock_errno()) {
                     default:
-                        cmp.error(::std::error_code(errno, ::std::system_category()));
+                        cmp.error(::std::error_code(sock_errno(), ::std::system_category()));
                         return ::beman::net::detail::submit_result::error;
                     case EINTR:
                         break;
@@ -227,16 +245,16 @@ struct beman::net::detail::poll_context final : ::beman::net::detail::context_ba
         auto        handle{this->native_handle(op->id)};
         const auto& endpoint(::std::get<0>(*op));
         if (-1 == ::fcntl(handle, F_SETFL, O_NONBLOCK)) {
-            op->error(::std::error_code(errno, ::std::system_category()));
+            op->error(::std::error_code(sock_errno(), ::std::system_category()));
             return ::beman::net::detail::submit_result::error;
         }
         if (0 == ::connect(handle, endpoint.data(), endpoint.size())) {
             op->complete();
             return ::beman::net::detail::submit_result::ready;
         }
-        switch (errno) {
+        switch (sock_errno()) {
         default:
-            op->error(::std::error_code(errno, ::std::system_category()));
+            op->error(::std::error_code(sock_errno(), ::std::system_category()));
             return ::beman::net::detail::submit_result::error;
         case EINPROGRESS:
         case EINTR:
@@ -250,7 +268,7 @@ struct beman::net::detail::poll_context final : ::beman::net::detail::context_ba
             int         error{};
             ::socklen_t len{sizeof(error)};
             if (-1 == ::getsockopt(hndl, SOL_SOCKET, SO_ERROR, &error, &len)) {
-                o->error(::std::error_code(errno, ::std::system_category()));
+                o->error(::std::error_code(sock_errno(), ::std::system_category()));
                 return ::beman::net::detail::submit_result::error;
             }
             if (0 == error) {
@@ -276,9 +294,9 @@ struct beman::net::detail::poll_context final : ::beman::net::detail::context_ba
                     completion.complete();
                     return ::beman::net::detail::submit_result::ready;
                 } else
-                    switch (errno) {
+                    switch (sock_errno()) {
                     default:
-                        completion.error(::std::error_code(errno, ::std::system_category()));
+                        completion.error(::std::error_code(sock_errno(), ::std::system_category()));
                         return ::beman::net::detail::submit_result::error;
                     case ECONNRESET:
                     case EPIPE:
@@ -306,9 +324,9 @@ struct beman::net::detail::poll_context final : ::beman::net::detail::context_ba
                     completion.complete();
                     return ::beman::net::detail::submit_result::ready;
                 } else
-                    switch (errno) {
+                    switch (sock_errno()) {
                     default:
-                        completion.error(::std::error_code(errno, ::std::system_category()));
+                        completion.error(::std::error_code(sock_errno(), ::std::system_category()));
                         return ::beman::net::detail::submit_result::error;
                     case ECONNRESET:
                     case EPIPE:

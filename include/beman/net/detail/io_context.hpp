@@ -13,6 +13,8 @@
 #include <beman/net/detail/io_context_scheduler.hpp>
 #ifdef BEMAN_NET_USE_URING
 #include <beman/net/detail/uring_context.hpp>
+#elif defined(BEMAN_NET_USE_IOCP)
+#include <beman/net/detail/iocp_context.hpp>
 #else
 #include <beman/net/detail/poll_context.hpp>
 #endif
@@ -23,7 +25,9 @@
 #include <csignal>
 #include <limits>
 #include <system_error>
-
+#ifndef _MSC_VER
+#include <csignal>
+#endif
 // ----------------------------------------------------------------------------
 
 namespace beman::net {
@@ -36,6 +40,8 @@ class beman::net::io_context {
   private:
 #ifdef BEMAN_NET_USE_URING
     ::std::unique_ptr<::beman::net::detail::context_base> d_owned{new ::beman::net::detail::uring_context()};
+#elif defined(BEMAN_NET_USE_IOCP)
+    ::std::unique_ptr<::beman::net::detail::context_base> d_owned{new ::beman::net::detail::iocp_context()};
 #else
     ::std::unique_ptr<::beman::net::detail::context_base> d_owned{new ::beman::net::detail::poll_context()};
 #endif
@@ -55,7 +61,14 @@ class beman::net::io_context {
     };
     auto get_handle() -> handle { return handle(this); }
 
-    io_context() { std::signal(SIGPIPE, SIG_IGN); }
+    io_context() {
+#ifndef _MSC_VER
+        // SIGPIPE does not exist on Windows; suppress it on POSIX so that
+        // writing to a closed socket returns an error rather than terminating
+        // the process.
+        std::signal(SIGPIPE, SIG_IGN);
+#endif
+    }
     io_context(::beman::net::detail::context_base& context) : d_owned(), d_context(context) {}
     io_context(io_context&&) = delete;
 

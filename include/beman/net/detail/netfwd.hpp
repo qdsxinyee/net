@@ -12,8 +12,13 @@
 namespace beman::net::detail {
 enum socket_id : ::std::uint_least32_t { invalid = ::std::numeric_limits<::std::uint_least32_t>::max() };
 struct context_base;
+#ifdef _MSC_VER
+using native_handle_type                           = ::std::uintptr_t; // SOCKET is ULONG_PTR
+inline constexpr native_handle_type invalid_handle = ::std::numeric_limits<::std::uintptr_t>::max(); // INVALID_SOCKET
+#else
 using native_handle_type = int;
 inline constexpr native_handle_type invalid_handle{-1};
+#endif
 } // namespace beman::net::detail
 
 namespace beman::net {
