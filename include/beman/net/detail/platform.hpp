@@ -14,21 +14,21 @@
 // without any #ifdef outside of this file.
 //
 // Types defined here for Windows:
-//   iovec      – matches POSIX iovec (iov_base / iov_len), converts to WSABUF
-//   msghdr     – matches POSIX msghdr field names, converts to WSAMSG
-//   socklen_t  – int (matches WinSock2 convention)
-//   pollfd     – alias for WSAPOLLFD
-//   nfds_t     – alias for ULONG
+//   iovec      - matches POSIX iovec (iov_base / iov_len), converts to WSABUF
+//   msghdr     - matches POSIX msghdr field names, converts to WSAMSG
+//   socklen_t  - int (matches WinSock2 convention)
+//   pollfd     - alias for WSAPOLLFD
+//   nfds_t     - alias for ULONG
 //
 // Free functions defined here for Windows:
-//   sock_errno()          – WSAGetLastError() / errno
-//   close(SOCKET)         – closesocket()
-//   fcntl(SOCKET, int, int) – ioctlsocket(FIONBIO) for O_NONBLOCK only
-//   poll(...)             – WSAPoll()
-//   recvmsg(...)          – WSARecvMsg() (loaded dynamically)
-//   sendmsg(...)          – WSASendMsg() (loaded dynamically)
-//   getsockopt(...)       – casts void* → char* for WinSock2
-//   setsockopt(...)       – casts const void* → const char* for WinSock2
+//   sock_errno()          - WSAGetLastError() / errno
+//   close(SOCKET)         - closesocket()
+//   fcntl(SOCKET, int, int) - ioctlsocket(FIONBIO) for O_NONBLOCK only
+//   poll(...)             - WSAPoll()
+//   recvmsg(...)          - WSARecvMsg() (loaded dynamically)
+//   sendmsg(...)          - WSASendMsg() (loaded dynamically)
+//   getsockopt(...)       - casts void* -> char* for WinSock2
+//   setsockopt(...)       - casts const void* -> const char* for WinSock2
 // ----------------------------------------------------------------------------
 
 #ifdef _MSC_VER
@@ -82,7 +82,7 @@ inline int sock_errno() noexcept { return ::WSAGetLastError(); }
 // Provides an implicit conversion to WSABUF so that WSARecv / WSASend
 // call sites can pass iovec* directly after reinterpret_cast.
 //
-// Note: WSABUF has { ULONG len; CHAR* buf; } – note the reversed order and
+// Note: WSABUF has { ULONG len; CHAR* buf; } - note the reversed order and
 // narrower length type. The conversion handles both differences.
 
 struct iovec {
