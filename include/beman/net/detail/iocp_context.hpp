@@ -86,7 +86,7 @@ namespace beman::net::detail {
 enum class iocp_op_kind : unsigned char { accept, connect, receive, send, timer };
 
 struct iocp_op {
-    OVERLAPPED   overlapped{}; // MUST be first – reinterpret_cast relies on it
+    OVERLAPPED   overlapped{}; // MUST be first - reinterpret_cast relies on it
     io_base*     base{nullptr};
     iocp_op_kind kind{};
 
@@ -311,7 +311,7 @@ struct beman::net::detail::iocp_context final : ::beman::net::detail::context_ba
     }
 
     // ------------------------------------------------------------------
-    // context_base – socket management
+    // context_base - socket management
     // ------------------------------------------------------------------
 
     auto make_socket(int fd) -> ::beman::net::detail::socket_id override {
@@ -372,7 +372,7 @@ struct beman::net::detail::iocp_context final : ::beman::net::detail::context_ba
     }
 
     // ------------------------------------------------------------------
-    // context_base – event loop
+    // context_base - event loop
     // ------------------------------------------------------------------
 
     auto run_one() -> ::std::size_t override {
@@ -431,7 +431,7 @@ struct beman::net::detail::iocp_context final : ::beman::net::detail::context_ba
     }
 
     // ------------------------------------------------------------------
-    // context_base – async operations
+    // context_base - async operations
     // ------------------------------------------------------------------
 
     auto accept(::beman::net::detail::context_base::accept_operation* completion)

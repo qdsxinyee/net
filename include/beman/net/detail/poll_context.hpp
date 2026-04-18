@@ -80,6 +80,13 @@ struct beman::net::detail::poll_context final : ::beman::net::detail::context_ba
         return this->make_socket(fd);
 #endif
     }
+
+    // Mark a registered socket as non-blocking so that add_outstanding() will
+    // call work() immediately instead of going straight to poll().
+    // Must be called after make_socket() whenever the underlying fd has been
+    // put into non-blocking mode outside of this class (e.g. in accept's work
+    // lambda on Windows where F_GETFL is unavailable).
+    auto set_nonblocking(::beman::net::detail::socket_id id) -> void { this->d_sockets[id].blocking = false; }
     auto release(::beman::net::detail::socket_id id, ::std::error_code& error) -> void override final {
         ::beman::net::detail::native_handle_type handle(this->d_sockets[id].handle);
         this->d_sockets.erase(id);
@@ -170,7 +177,7 @@ struct beman::net::detail::poll_context final : ::beman::net::detail::context_ba
                 }
             } else {
                 for (::std::size_t i(this->d_poll.size()); 0 < i--;) {
-                    if (this->d_poll[i].revents & (this->d_poll[i].events | POLLERR)) {
+                    if (this->d_poll[i].revents & (this->d_poll[i].events | POLLERR )) {
                         ::beman::net::detail::io_base* completion = this->d_outstanding[i];
                         this->remove_outstanding(i);
                         completion->work(*this, completion);
@@ -222,7 +229,24 @@ struct beman::net::detail::poll_context final : ::beman::net::detail::context_ba
             op->cancel();
             cancel_op->cancel();
         } else {
+
+#ifdef _MSC_VER
+            // On Windows, accepted sockets are set non-blocking (blocking=false),
+            // so add_outstanding() calls work() immediately. If work() returns
+            // ready, op->complete() has already been called and op was never
+            // inserted into d_outstanding or d_timeouts.
+            // when_any then tries to cancel the peer op (e.g. the timeout timer)
+            // which arrives here having already fired and been removed from its
+            // queue. This is a normal completion-vs-cancellation race, not an
+            // error. We only need to notify cancel_op so when_any can clean up;
+            // op itself has already completed normally and needs no action.
+            cancel_op->cancel();
+#else
+            // On Linux all accepted sockets remain blocking=true, so work() is
+            // never called immediately and ops are always in a queue when
+            // cancel() is called. Reaching here indicates a real bug.
             std::cerr << "ERROR: poll_context::cancel(): entity not cancelled!\n";
+#endif
         }
     }
     auto schedule(::beman::net::detail::context_base::task* tsk) -> void override {
@@ -236,6 +260,34 @@ struct beman::net::detail::poll_context final : ::beman::net::detail::context_ba
             auto& cmp(*static_cast<accept_operation*>(comp));
 
             while (true) {
+#ifdef _MSC_VER
+                // On Windows, ::accept() returns SOCKET (ULONG_PTR).
+                ::SOCKET rc = ::accept(ctxt.native_handle(id), ::std::get<0>(cmp).data(), &::std::get<1>(cmp));
+                if (rc == INVALID_SOCKET) {
+                    switch (sock_errno()) {
+                    default:
+                        cmp.error(::std::error_code(sock_errno(), ::std::system_category()));
+                        return ::beman::net::detail::submit_result::error;
+                    case WSAEINTR:
+                        break; // retry
+                    case WSAEWOULDBLOCK:
+                        return ::beman::net::detail::submit_result::submit;
+                    }
+                } else {
+                    // Put the new socket into non-blocking mode so that subsequent
+                    // async_receive / async_send calls can attempt work() immediately
+                    // instead of blocking the event loop.
+                    // platform.hpp shims fcntl(F_SETFL, O_NONBLOCK) to ioctlsocket(FIONBIO).
+                    ::fcntl(static_cast<int>(rc), F_SETFL, O_NONBLOCK);
+                    auto new_id = ctxt.make_socket(static_cast<int>(rc));
+                    // make_socket() cannot detect the non-blocking state on Windows
+                    // (no F_GETFL equivalent), so we inform the context explicitly.
+                    static_cast<poll_context&>(ctxt).set_nonblocking(new_id);
+                    ::std::get<2>(cmp) = new_id;
+                    cmp.complete();
+                    return ::beman::net::detail::submit_result::ready;
+                }
+#else
                 int rc = ::accept(ctxt.native_handle(id), ::std::get<0>(cmp).data(), &::std::get<1>(cmp));
                 if (0 <= rc) {
                     ::std::get<2>(cmp) = ctxt.make_socket(rc);
@@ -252,6 +304,7 @@ struct beman::net::detail::poll_context final : ::beman::net::detail::context_ba
                         return ::beman::net::detail::submit_result::submit;
                     }
                 }
+#endif
             }
         };
         return this->add_outstanding(completion);
@@ -268,11 +321,22 @@ struct beman::net::detail::poll_context final : ::beman::net::detail::context_ba
             op->complete();
             return ::beman::net::detail::submit_result::ready;
         }
+#ifdef _MSC_VER
+        // On Windows we must also update the blocking flag in the socket record
+        // because F_GETFL is unavailable and make_socket() defaults to blocking=true.
+        this->set_nonblocking(op->id);
+#endif
         switch (sock_errno()) {
         default:
             op->error(::std::error_code(sock_errno(), ::std::system_category()));
             return ::beman::net::detail::submit_result::error;
         case EINPROGRESS:
+#ifdef _MSC_VER
+        // On Windows a non-blocking connect in progress reports WSAEWOULDBLOCK,
+        // not EINPROGRESS (the two are distinct Winsock error codes even though
+        // platform.hpp maps EINPROGRESS -> WSAEINPROGRESS for other purposes).
+        case WSAEWOULDBLOCK:
+#endif
         case EINTR:
             break;
         }
