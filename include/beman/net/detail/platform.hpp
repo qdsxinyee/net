@@ -184,33 +184,48 @@ inline ::LPFN_WSASENDMSG load_wsasendmsg(::SOCKET s) noexcept {
 // Allocated on the stack inside the wrappers to avoid heap allocation.
 inline constexpr ::ULONG k_max_iov = 16;
 
-inline int recvmsg(::SOCKET s, msghdr* msg, int /*flags*/) noexcept {
-    auto pfn = ::beman::net::detail::platform::load_wsarecvmsg(s);
-    if (!pfn) {
-        ::WSASetLastError(WSAEOPNOTSUPP);
-        return -1;
-    }
-
+inline int recvmsg(::SOCKET s, msghdr* msg, int flags) noexcept {
     ::WSABUF bufs[k_max_iov];
-    ::ULONG  n     = (msg->msg_iovlen < k_max_iov) ? msg->msg_iovlen : k_max_iov;
-    ::WSAMSG wm    = msg->to_wsamsg(bufs, n);
-    ::DWORD  bytes = 0;
-    int      rc    = pfn(s, &wm, &bytes, nullptr, nullptr);
+    ::ULONG  n = (msg->msg_iovlen < k_max_iov) ? msg->msg_iovlen : k_max_iov;
+    
+    for (::ULONG i = 0; i < n; ++i) {
+        bufs[i] = static_cast<::WSABUF>(msg->msg_iov[i]);
+    }
+    
+    ::DWORD bytes = 0;
+    ::DWORD dwFlags = static_cast<::DWORD>(flags);
+    int rc;
+    
+    // 如果有地址，说明是 UDP，用 WSARecvFrom；否则是 TCP，用 WSARecv
+    if (msg->msg_name) {
+        ::INT namelen = msg->msg_namelen;
+        rc = ::WSARecvFrom(s, bufs, n, &bytes, &dwFlags, msg->msg_name, &namelen, nullptr, nullptr);
+        msg->msg_namelen = namelen;
+    } else {
+        rc = ::WSARecv(s, bufs, n, &bytes, &dwFlags, nullptr, nullptr);
+    }
+    
     return rc == 0 ? static_cast<int>(bytes) : -1;
 }
 
-inline int sendmsg(::SOCKET s, msghdr* msg, int /*flags*/) noexcept {
-    auto pfn = ::beman::net::detail::platform::load_wsasendmsg(s);
-    if (!pfn) {
-        ::WSASetLastError(WSAEOPNOTSUPP);
-        return -1;
-    }
-
+inline int sendmsg(::SOCKET s, msghdr* msg, int flags) noexcept {
     ::WSABUF bufs[k_max_iov];
-    ::ULONG  n     = (msg->msg_iovlen < k_max_iov) ? msg->msg_iovlen : k_max_iov;
-    ::WSAMSG wm    = msg->to_wsamsg(bufs, n);
-    ::DWORD  bytes = 0;
-    int      rc    = pfn(s, &wm, 0, &bytes, nullptr, nullptr);
+    ::ULONG  n = (msg->msg_iovlen < k_max_iov) ? msg->msg_iovlen : k_max_iov;
+    
+    for (::ULONG i = 0; i < n; ++i) {
+        bufs[i] = static_cast<::WSABUF>(msg->msg_iov[i]);
+    }
+    
+    ::DWORD bytes = 0;
+    int rc;
+    
+    if (msg->msg_name) {
+        rc = ::WSASendTo(s, bufs, n, &bytes, static_cast<::DWORD>(flags), 
+                         msg->msg_name, msg->msg_namelen, nullptr, nullptr);
+    } else {
+        rc = ::WSASend(s, bufs, n, &bytes, static_cast<::DWORD>(flags), nullptr, nullptr);
+    }
+    
     return rc == 0 ? static_cast<int>(bytes) : -1;
 }
 
