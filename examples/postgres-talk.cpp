@@ -1,9 +1,6 @@
 // examples/postgres-talk.cpp                                         -*-C++-*-
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-// examples/http-server.cpp                                           -*-C++-*-
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
-
 #include <beman/net/net.hpp>
 #include <beman/execution/execution.hpp>
 #include <libpq-fe.h>
