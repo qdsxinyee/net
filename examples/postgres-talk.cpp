@@ -168,16 +168,25 @@ struct result {
 using results = std::vector<result>;
 auto print_results([](const results& res) noexcept { std::ranges::for_each(res, print_result); });
 
+auto wait_for_input(pg::connection& conn) {
+    return net::repeat_effect_until(net::async_poll(conn.socket, net::event_type::in) |
+                                        ex::upon_error([](auto&&) noexcept {}) |
+                                        ex::then([&conn](auto&&...) noexcept { PQconsumeInput(conn); }),
+                                    [&conn] noexcept { return !PQisBusy(conn); });
+}
 auto exec1(pg::connection& conn, const char* query) {
     return ex::just() | ex::then([&conn, query] noexcept { PQsendQuery(conn, query); }) |
            net::repeat_effect_until(net::async_poll(conn.socket, net::event_type::out) |
                                         ex::upon_error([](auto&&) noexcept {}) | ex::then([](auto&&...) noexcept {}),
                                     [&conn] noexcept { return not PQflush(conn); }) |
-           net::repeat_effect_until(net::async_poll(conn.socket, net::event_type::in) |
-                                        ex::upon_error([](auto&&) noexcept {}) |
-                                        ex::then([&conn](auto&&...) noexcept { PQconsumeInput(conn); }),
-                                    [&conn] noexcept { return !PQisBusy(conn); }) |
-           ex::then([&conn] noexcept { return pg::result(PQgetResult(conn)); });
+           ex::let_value([&conn, res = pg::results()]() mutable noexcept {
+               return ex::just() |
+                      net::repeat_effect_until(ex::just() | wait_for_input(conn) | ex::then([&conn, &res] noexcept {
+                                                   res.push_back(pg::result(PQgetResult(conn)));
+                                               }),
+                                               [&res]() noexcept { return !res.empty() && !res.back(); }) |
+                      ex::then([&res] noexcept { return std::move(res); });
+           });
 }
 ex::task<pg::results, pg::env> exec2(pg::connection& conn, const char* query) {
     PQsendQuery(conn, query);
@@ -202,7 +211,7 @@ ex::task<pg::results, pg::env> exec2(pg::connection& conn, const char* query) {
 }
 
 auto exec(const char* query) {
-    return [query](pg::connection& conn) { return pg::exec2(conn, query); };
+    return [query](pg::connection& conn) { return pg::exec1(conn, query); };
 }
 } // namespace pg
 
