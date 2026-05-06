@@ -19,10 +19,12 @@ namespace net = beman::net;
 using namespace std::chrono_literals;
 
 // PQconnectdb(const char* connstr) -> PGconn*
+// PQfinish(PGconn*) - clean-up
 // PQexec(const PGconn *conn, const char* query) -> PGresult* - query the database
 // PQsendQuery(const PGconn *conn, const char* query) - send a query
 // PQconsumeInput(const PGconn *conn) - consume available input, clear socket stat
 // PQgetResult(const PGconn *conn) -> PGresult* - get result, return nullptr if no more results, or would block
+// PQclear(PGresult) - clean-up
 // PQsetnonblocking(const PGconn *conn, int arg) - set non-blocking mode to avoid write blocks
 // PQsocket(const PGconn *conn) - get socket
 // PQflush(const PGconn *conn) - flush output buffer, return 1 if still pending data
