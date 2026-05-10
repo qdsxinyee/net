@@ -102,8 +102,8 @@ struct iocp_op {
 // ----------------------------------------------------------------------------
 
 struct beman::net::detail::iocp_record {
-    ::SOCKET          socket{INVALID_SOCKET};
-    bool              bound{false};
+    ::SOCKET socket{INVALID_SOCKET};
+    bool     bound{false};
 
     explicit iocp_record(::SOCKET s) : socket(s) {}
 };
@@ -147,32 +147,18 @@ struct beman::net::detail::iocp_context final : ::beman::net::detail::context_ba
     timer_priority_t                                                   d_timeouts;
     ::beman::net::detail::context_base::task*                          d_tasks{nullptr};
 
-    //Record the number of asynchronous I/O operations submitted to the kernel.
-    ::std::size_t                                                      d_outstanding_io{0};
+    // Record the number of asynchronous I/O operations submitted to the kernel.
+    ::std::size_t d_outstanding_io{0};
 
-    //Keep track of the number of currently active sockets to prevent the event loop from terminating prematurely
-    ::std::size_t                                                      d_socket_count{0};
-
-    // Helper: change d_outstanding_io with logging
-    auto inc_outstanding(const char* reason) -> void {
-        ++this->d_outstanding_io;
-        ::std::cout << "[iocp] outstanding++ (" << reason << ") -> " << this->d_outstanding_io << "\n";
-    }
-    auto dec_outstanding(const char* reason) -> void {
-        --this->d_outstanding_io;
-        ::std::cout << "[iocp] outstanding-- (" << reason << ") -> " << this->d_outstanding_io << "\n";
-    }
+    // Keep track of the number of currently active sockets to prevent the event loop from terminating prematurely
+    ::std::size_t d_socket_count{0};
 
     struct deferred_io_task : context_base::task {
         iocp_context* ctx;
         io_base*      base;
         ::DWORD       bytes;
-        deferred_io_task(iocp_context* c, io_base* b, ::DWORD by)
-            : ctx(c), base(b), bytes(by) {
-            ctx->inc_outstanding("deferred_io_task ctor");
-        }
+        deferred_io_task(iocp_context* c, io_base* b, ::DWORD by) : ctx(c), base(b), bytes(by) {}
         auto complete() -> void override {
-            ctx->dec_outstanding("deferred_io_task::complete");
             ctx->m_current_bytes = this->bytes;
             ctx->m_current_error = 0;
             if (this->base->work)
@@ -183,8 +169,8 @@ struct beman::net::detail::iocp_context final : ::beman::net::detail::context_ba
 
   public:
     // Used to temporarily store the system state for the Lambda closure after run_one() parsing completes
-    ::DWORD                                                            m_current_bytes{0};
-    int                                                                m_current_error{0};  
+    ::DWORD m_current_bytes{0};
+    int     m_current_error{0};
 
     // ------------------------------------------------------------------
     // Internal helpers
@@ -200,9 +186,7 @@ struct beman::net::detail::iocp_context final : ::beman::net::detail::context_ba
         // This prevents double-completion: our deferred_io_task handles rc==0,
         // and without this flag the kernel would also post a completion for the
         // same iocp_op we already deleted, causing a use-after-free crash.
-        ::SetFileCompletionNotificationModes(
-            reinterpret_cast<HANDLE>(s),
-            FILE_SKIP_COMPLETION_PORT_ON_SUCCESS);
+        ::SetFileCompletionNotificationModes(reinterpret_cast<HANDLE>(s), FILE_SKIP_COMPLETION_PORT_ON_SUCCESS);
         return true;
     }
 
@@ -226,10 +210,7 @@ struct beman::net::detail::iocp_context final : ::beman::net::detail::context_ba
             return 0u;
         auto* tsk     = this->d_tasks;
         this->d_tasks = tsk->next;
-        ::std::cout << "[iocp] process_task() executing task\n";
         tsk->complete();
-        ::std::cout << "[iocp] process_task() task done, outstanding=" 
-                    << this->d_outstanding_io << " sockets=" << this->d_socket_count << "\n";
         return 1u;
     }
 
@@ -276,28 +257,14 @@ struct beman::net::detail::iocp_context final : ::beman::net::detail::context_ba
     // Dispatch a completion to the appropriate io_base.
     // bytes is the number of bytes transferred (for receive / send).
     auto dispatch(::beman::net::detail::iocp_op* op, ::DWORD bytes, bool ok) -> void {
-        auto* base = op->base;
+        auto* base            = op->base;
         this->m_current_bytes = bytes;
         this->m_current_error = ok ? 0 : static_cast<int>(::GetLastError());
 
         delete op;
-        dec_outstanding("dispatch (IOCP completion)");
 
         if (base->work) {
-            ::std::cout << "[iocp] dispatch calling work, bytes=" << bytes 
-                        << " err=" << this->m_current_error << "\n";
-            ::std::cout.flush();
-            try {
-                base->work(*this, base);
-            } catch (const std::exception& e) {
-                ::std::cout << "[iocp] dispatch work threw exception: " << e.what() << "\n";
-                ::std::cout.flush();
-            } catch (...) {
-                ::std::cout << "[iocp] dispatch work threw unknown exception\n";
-                ::std::cout.flush();
-            }
-            ::std::cout << "[iocp] dispatch work returned\n";
-            ::std::cout.flush();
+            base->work(*this, base);
         } else {
             // 没有 work 回调（如 timer），直接处理
             if (!ok && this->m_current_error == ERROR_OPERATION_ABORTED) {
@@ -308,7 +275,6 @@ struct beman::net::detail::iocp_context final : ::beman::net::detail::context_ba
                 base->complete();
             }
         }
-
     }
 
     // Stored in io_base::extra for the duration of an AcceptEx call.
@@ -366,9 +332,9 @@ struct beman::net::detail::iocp_context final : ::beman::net::detail::context_ba
 
     // Internal overload that accepts a SOCKET directly, avoiding the int truncation.
     auto make_socket_from_handle(::SOCKET s) -> ::beman::net::detail::socket_id {
-         this->associate(s);
-         ++this->d_socket_count;
-         return this->d_sockets.insert(::beman::net::detail::iocp_record(s));
+        this->associate(s);
+        ++this->d_socket_count;
+        return this->d_sockets.insert(::beman::net::detail::iocp_record(s));
     }
 
     auto release(::beman::net::detail::socket_id id, ::std::error_code& error) -> void override {
@@ -378,8 +344,6 @@ struct beman::net::detail::iocp_context final : ::beman::net::detail::context_ba
             error = ::std::error_code(::WSAGetLastError(), ::std::system_category());
 
         --this->d_socket_count;
-        ::std::cout << "[iocp] release() socket_count -> " << this->d_socket_count 
-                    << " outstanding=" << this->d_outstanding_io << "\n";
     }
 
     auto native_handle(::beman::net::detail::socket_id id) -> ::beman::net::detail::native_handle_type override {
@@ -416,18 +380,12 @@ struct beman::net::detail::iocp_context final : ::beman::net::detail::context_ba
 
     auto run_one() -> ::std::size_t override {
 
-        ::std::cout << "[iocp] run_one() called, outstanding=" 
-                    << this->d_outstanding_io 
-                    << " sockets=" << this->d_socket_count << "\n";
         auto now = ::std::chrono::system_clock::now();
 
         if (0u < this->process_timeout(now) || 0u < this->process_task())
             return 1u;
 
-        if (this->d_timeouts.empty() && !this->d_tasks && this->d_outstanding_io == 0 && this->d_socket_count == 0)
-        {
-            ::std::cout << "[iocp] run_one returning 0 (top-check): outstanding=" 
-                        << this->d_outstanding_io << " sockets=" << this->d_socket_count << "\n";
+        if (this->d_timeouts.empty() && !this->d_tasks && this->d_outstanding_io == 0 && this->d_socket_count == 0) {
             return ::std::size_t{};
         }
 
@@ -439,35 +397,24 @@ struct beman::net::detail::iocp_context final : ::beman::net::detail::context_ba
             OVERLAPPED* ov         = nullptr;
 
             ::BOOL ok = ::GetQueuedCompletionStatus(this->d_iocp, &bytes, &key, &ov, timeout_ms);
-            ::std::cout << "[iocp] GQCS returned ok=" << ok 
-                        << " ov=" << (void*)ov 
-                        << " bytes=" << bytes 
-                        << " err=" << ::GetLastError() << "\n";
             if (ov == nullptr) {
                 // Timeout or wakeup with no real completion.
                 if (0u < this->process_timeout(::std::chrono::system_clock::now()))
                     return 1u;
                 if (0u < this->process_task())
                     return 1u;
-                ::std::cout << "[iocp] run_one returning 0 via ov==nullptr, outstanding=" << this->d_outstanding_io << "\n";
-                
-                if (this->d_timeouts.empty() && !this->d_tasks && this->d_outstanding_io == 0 && this->d_socket_count == 0) 
-                {
-                    ::std::cout << "[iocp] run_one returning 0 (ov==nullptr): outstanding="
-                                << this->d_outstanding_io << " sockets=" << this->d_socket_count << "\n";
+
+                if (this->d_timeouts.empty() && !this->d_tasks && this->d_outstanding_io == 0 &&
+                    this->d_socket_count == 0) {
                     return ::std::size_t{};
                 }
 
                 continue;
-               // return ::std::size_t{};
             }
 
             // Recover our wrapper from the OVERLAPPED pointer.
             // Safe because OVERLAPPED is the first member of iocp_op.
             auto* op = reinterpret_cast<::beman::net::detail::iocp_op*>(ov);
-            ::std::cout << "[iocp] dispatching ov=" << (void*)ov 
-                        << " kind=" << static_cast<int>(op->kind)
-                        << " base=" << (void*)op->base << "\n";
             this->dispatch(op, bytes, ok == TRUE);
             return 1u;
         }
@@ -480,37 +427,23 @@ struct beman::net::detail::iocp_context final : ::beman::net::detail::context_ba
 
     auto schedule(::beman::net::detail::context_base::task* tsk) -> void override {
         bool was_empty = (this->d_tasks == nullptr);
-        tsk->next     = this->d_tasks;
-        this->d_tasks = tsk;
-        //this->wakeup();
-        /*
-        if(was_empty)
-        {
-            this->wakeup();
-        }
-        */
+        tsk->next      = this->d_tasks;
+        this->d_tasks  = tsk;
     }
 
     auto cancel(::beman::net::detail::io_base* cancel_op, ::beman::net::detail::io_base* op) -> void override {
-        if (op->id == ::beman::net::detail::socket_id::invalid) 
-        {
+        if (op->id == ::beman::net::detail::socket_id::invalid) {
             // Timer: remove from queue and cancel synchronously
-            ::std::cout << "[iocp] cancel() timer op\n";
             this->d_timeouts.erase(static_cast<timer_node_t*>(op));
             op->cancel();
         } else {
             // Socket IO: async cancel, wait for ERROR_OPERATION_ABORTED from IOCP
-            ::std::cout << "[iocp] cancel() socket io op, calling CancelIoEx\n";
             ::SOCKET s = this->socket_of(op->id);
-            if (s != INVALID_SOCKET) 
-            {
+            if (s != INVALID_SOCKET) {
                 ::CancelIoEx(reinterpret_cast<::HANDLE>(s), nullptr);
             }
         }
-        ::std::cout << "[iocp] cancel() calling cancel_op->cancel()\n";
         cancel_op->cancel();
-        ::std::cout << "[iocp] cancel() done, outstanding=" << this->d_outstanding_io 
-                    << " sockets=" << this->d_socket_count << "\n";
     }
 
     // ------------------------------------------------------------------
@@ -519,9 +452,6 @@ struct beman::net::detail::iocp_context final : ::beman::net::detail::context_ba
 
     auto accept(::beman::net::detail::context_base::accept_operation* completion)
         -> ::beman::net::detail::submit_result override {
-
-        ::std::cout << "[iocp] accept() called, d_outstanding_io=" << this->d_outstanding_io << "\n";
-        ::std::cout << "[iocp] AcceptEx submitted\n";
 
         ::SOCKET listen_sock = this->socket_of(completion->id);
 
@@ -559,8 +489,6 @@ struct beman::net::detail::iocp_context final : ::beman::net::detail::context_ba
         // once the kernel signals the accept completion.
         completion->work = [](::beman::net::detail::context_base& ctx,
                               ::beman::net::detail::io_base*      base) -> ::beman::net::detail::submit_result {
-            ::std::cout << "[iocp] accept complete, new socket registered\n";
-
             auto& iocp_ctx = static_cast<iocp_context&>(ctx);
             auto* cmp      = static_cast<accept_operation*>(base);
             auto* st       = static_cast<accept_state*>(cmp->extra.get());
@@ -585,14 +513,10 @@ struct beman::net::detail::iocp_context final : ::beman::net::detail::context_ba
             st->accept_sock     = INVALID_SOCKET; // prevent double-close
             ::std::get<2>(*cmp) = iocp_ctx.make_socket_from_handle(accepted);
 
-
             cmp->extra.reset(); // release accept_state
-            
 
-            ::std::cout << "[iocp] calling accept cmp->complete()\n";
             cmp->complete();
 
-            ::std::cout << "[iocp] after cmp->complete(), returning\n";
             return ::beman::net::detail::submit_result::ready;
         };
 
@@ -610,7 +534,6 @@ struct beman::net::detail::iocp_context final : ::beman::net::detail::context_ba
                                  delete st;
                              }};
 
-
         ::BOOL ok = fn(listen_sock,
                        accept_sock,
                        buf,
@@ -619,7 +542,7 @@ struct beman::net::detail::iocp_context final : ::beman::net::detail::context_ba
                        addr_buf_size,
                        &bytes_rx,
                        &op->overlapped);
-        
+
         if (!ok && ::WSAGetLastError() != ERROR_IO_PENDING) {
             delete[] buf;
             delete op;
@@ -627,8 +550,6 @@ struct beman::net::detail::iocp_context final : ::beman::net::detail::context_ba
             completion->error(::std::error_code(::WSAGetLastError(), ::std::system_category()));
             return ::beman::net::detail::submit_result::error;
         }
-
-        inc_outstanding("accept submitted");
 
         return ::beman::net::detail::submit_result::submit;
     }
@@ -689,8 +610,6 @@ struct beman::net::detail::iocp_context final : ::beman::net::detail::context_ba
             return ::beman::net::detail::submit_result::error;
         }
 
-        inc_outstanding("connect submitted");
-
         return ::beman::net::detail::submit_result::submit;
     }
 
@@ -704,12 +623,13 @@ struct beman::net::detail::iocp_context final : ::beman::net::detail::context_ba
 
         ::msghdr* msg   = &::std::get<0>(*op);
         iocp_op_->flags = static_cast<::DWORD>(::std::get<1>(*op));
-        int       rc    = SOCKET_ERROR;
+        int rc          = SOCKET_ERROR;
 
-        op->work = [](::beman::net::detail::context_base& ctx, ::beman::net::detail::io_base* base) -> ::beman::net::detail::submit_result {
+        op->work = [](::beman::net::detail::context_base& ctx,
+                      ::beman::net::detail::io_base*      base) -> ::beman::net::detail::submit_result {
             auto& iocp = static_cast<iocp_context&>(ctx);
             auto* cmp  = static_cast<receive_operation*>(base);
-            
+
             if (iocp.m_current_error == ERROR_OPERATION_ABORTED || iocp.m_current_error == WSAECONNRESET) {
                 cmp->cancel();
                 return ::beman::net::detail::submit_result::ready;
@@ -726,28 +646,22 @@ struct beman::net::detail::iocp_context final : ::beman::net::detail::context_ba
         ::WSABUF bufs[16];
         ::ULONG  n = (msg->msg_iovlen < 16) ? msg->msg_iovlen : 16;
         for (::ULONG i = 0; i < n; ++i)
-                bufs[i] = static_cast<::WSABUF>(msg->msg_iov[i]);
+            bufs[i] = static_cast<::WSABUF>(msg->msg_iov[i]);
 
-        ::DWORD bytes_sync = 0;  
+        ::DWORD bytes_sync = 0;
         rc = ::WSARecv(rec.socket, bufs, n, &bytes_sync, &iocp_op_->flags, &iocp_op_->overlapped, nullptr);
-        ::std::cout << "[iocp] WSARecv submitted rc=" << rc 
-            << " err=" << ::WSAGetLastError() << "\n";
-        
+
         if (rc == 0) {
-            ::std::cout << "[iocp] WSARecv sync complete, bytes=" << bytes_sync << ", using deferred_io_task\n";
-            delete iocp_op_; 
+            delete iocp_op_;
             this->schedule(new deferred_io_task(this, op, bytes_sync));
-            return ::beman::net::detail::submit_result::submit; 
+            return ::beman::net::detail::submit_result::submit;
         }
-        
-        
+
         if (rc == SOCKET_ERROR && ::WSAGetLastError() != WSA_IO_PENDING) {
             delete iocp_op_;
             op->error(::std::error_code(::WSAGetLastError(), ::std::system_category()));
             return ::beman::net::detail::submit_result::error;
         }
-
-        inc_outstanding("WSARecv submitted async");
 
         return ::beman::net::detail::submit_result::submit;
     }
@@ -759,10 +673,11 @@ struct beman::net::detail::iocp_context final : ::beman::net::detail::context_ba
         auto& rec      = this->d_sockets[op->id];
         auto* iocp_op_ = make_op(op, ::beman::net::detail::iocp_op_kind::send);
 
-        op->work = [](::beman::net::detail::context_base& ctx, ::beman::net::detail::io_base* base) -> ::beman::net::detail::submit_result {
+        op->work = [](::beman::net::detail::context_base& ctx,
+                      ::beman::net::detail::io_base*      base) -> ::beman::net::detail::submit_result {
             auto& iocp = static_cast<iocp_context&>(ctx);
             auto* cmp  = static_cast<send_operation*>(base);
-            
+
             if (iocp.m_current_error == ERROR_OPERATION_ABORTED) {
                 cmp->cancel();
                 return ::beman::net::detail::submit_result::ready;
@@ -776,35 +691,28 @@ struct beman::net::detail::iocp_context final : ::beman::net::detail::context_ba
             return ::beman::net::detail::submit_result::ready;
         };
 
-        ::msghdr* msg   = &::std::get<0>(*op);
-        int       rc    = SOCKET_ERROR;
+        ::msghdr* msg = &::std::get<0>(*op);
+        int       rc  = SOCKET_ERROR;
 
         ::WSABUF bufs[16];
         ::ULONG  n = (msg->msg_iovlen < 16) ? msg->msg_iovlen : 16;
         for (::ULONG i = 0; i < n; ++i)
-                bufs[i] = static_cast<::WSABUF>(msg->msg_iov[i]);
+            bufs[i] = static_cast<::WSABUF>(msg->msg_iov[i]);
 
- 
         ::DWORD bytes_sync = 0;
-        rc = ::WSASend(rec.socket, bufs, n, &bytes_sync, 0, &iocp_op_->overlapped, nullptr);
-        ::std::cout << "[iocp] WSASend submitted rc=" << rc
-            << " err=" << ::WSAGetLastError() << "\n";
-        
+        rc                 = ::WSASend(rec.socket, bufs, n, &bytes_sync, 0, &iocp_op_->overlapped, nullptr);
+
         if (rc == 0) {
-            ::std::cout << "[iocp] WSASend sync complete, bytes=" << bytes_sync << ", using deferred_io_task\n";
             delete iocp_op_;
             this->schedule(new deferred_io_task(this, op, bytes_sync));
             return ::beman::net::detail::submit_result::submit;
         }
-       
-        
+
         if (rc == SOCKET_ERROR && ::WSAGetLastError() != WSA_IO_PENDING) {
             delete iocp_op_;
             op->error(::std::error_code(::WSAGetLastError(), ::std::system_category()));
             return ::beman::net::detail::submit_result::error;
         }
-
-        inc_outstanding("WSASend submitted async");
 
         return ::beman::net::detail::submit_result::submit;
     }
@@ -815,7 +723,7 @@ struct beman::net::detail::iocp_context final : ::beman::net::detail::context_ba
         -> ::beman::net::detail::submit_result override {
 
         op->id = ::beman::net::detail::socket_id::invalid;
-            
+
         if (::std::chrono::system_clock::now() < ::std::get<0>(*op)) {
             this->d_timeouts.insert(op);
             return ::beman::net::detail::submit_result::submit;

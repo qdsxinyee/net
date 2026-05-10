@@ -177,7 +177,7 @@ struct beman::net::detail::poll_context final : ::beman::net::detail::context_ba
                 }
             } else {
                 for (::std::size_t i(this->d_poll.size()); 0 < i--;) {
-                    if (this->d_poll[i].revents & (this->d_poll[i].events | POLLERR  )) {
+                    if (this->d_poll[i].revents & (this->d_poll[i].events | POLLERR)) {
                         ::beman::net::detail::io_base* completion = this->d_outstanding[i];
                         this->remove_outstanding(i);
                         completion->work(*this, completion);

@@ -164,45 +164,45 @@ inline constexpr ::ULONG k_max_iov = 16;
 inline int recvmsg(::SOCKET s, msghdr* msg, int flags) noexcept {
     ::WSABUF bufs[k_max_iov];
     ::ULONG  n = (msg->msg_iovlen < k_max_iov) ? msg->msg_iovlen : k_max_iov;
-    
+
     for (::ULONG i = 0; i < n; ++i) {
         bufs[i] = static_cast<::WSABUF>(msg->msg_iov[i]);
     }
-    
-    ::DWORD bytes = 0;
+
+    ::DWORD bytes   = 0;
     ::DWORD dwFlags = static_cast<::DWORD>(flags);
-    int rc;
-    
+    int     rc;
+
     // 如果有地址，说明是 UDP，用 WSARecvFrom；否则是 TCP，用 WSARecv
     if (msg->msg_name) {
-        ::INT namelen = msg->msg_namelen;
-        rc = ::WSARecvFrom(s, bufs, n, &bytes, &dwFlags, msg->msg_name, &namelen, nullptr, nullptr);
+        ::INT namelen    = msg->msg_namelen;
+        rc               = ::WSARecvFrom(s, bufs, n, &bytes, &dwFlags, msg->msg_name, &namelen, nullptr, nullptr);
         msg->msg_namelen = namelen;
     } else {
         rc = ::WSARecv(s, bufs, n, &bytes, &dwFlags, nullptr, nullptr);
     }
-    
+
     return rc == 0 ? static_cast<int>(bytes) : -1;
 }
 
 inline int sendmsg(::SOCKET s, msghdr* msg, int flags) noexcept {
     ::WSABUF bufs[k_max_iov];
     ::ULONG  n = (msg->msg_iovlen < k_max_iov) ? msg->msg_iovlen : k_max_iov;
-    
+
     for (::ULONG i = 0; i < n; ++i) {
         bufs[i] = static_cast<::WSABUF>(msg->msg_iov[i]);
     }
-    
+
     ::DWORD bytes = 0;
-    int rc;
-    
+    int     rc;
+
     if (msg->msg_name) {
-        rc = ::WSASendTo(s, bufs, n, &bytes, static_cast<::DWORD>(flags), 
-                         msg->msg_name, msg->msg_namelen, nullptr, nullptr);
+        rc = ::WSASendTo(
+            s, bufs, n, &bytes, static_cast<::DWORD>(flags), msg->msg_name, msg->msg_namelen, nullptr, nullptr);
     } else {
         rc = ::WSASend(s, bufs, n, &bytes, static_cast<::DWORD>(flags), nullptr, nullptr);
     }
-    
+
     return rc == 0 ? static_cast<int>(bytes) : -1;
 }
 
