@@ -157,29 +157,6 @@ inline int fcntl(::SOCKET s, int /*cmd*/, int flags) noexcept {
 // loaded at runtime via WSAIoctl.  We load them once (per process) on the
 // first call that provides a valid socket handle.
 
-namespace beman::net::detail::platform {
-inline ::LPFN_WSARECVMSG load_wsarecvmsg(::SOCKET s) noexcept {
-    static ::LPFN_WSARECVMSG pfn = nullptr;
-    if (!pfn) {
-        ::GUID  guid = WSAID_WSARECVMSG;
-        ::DWORD n    = 0;
-        ::WSAIoctl(
-            s, SIO_GET_EXTENSION_FUNCTION_POINTER, &guid, sizeof(guid), &pfn, sizeof(pfn), &n, nullptr, nullptr);
-    }
-    return pfn;
-}
-inline ::LPFN_WSASENDMSG load_wsasendmsg(::SOCKET s) noexcept {
-    static ::LPFN_WSASENDMSG pfn = nullptr;
-    if (!pfn) {
-        ::GUID  guid = WSAID_WSASENDMSG;
-        ::DWORD n    = 0;
-        ::WSAIoctl(
-            s, SIO_GET_EXTENSION_FUNCTION_POINTER, &guid, sizeof(guid), &pfn, sizeof(pfn), &n, nullptr, nullptr);
-    }
-    return pfn;
-}
-} // namespace beman::net::detail::platform
-
 // Maximum scatter-gather segments we support in a single recvmsg/sendmsg call.
 // Allocated on the stack inside the wrappers to avoid heap allocation.
 inline constexpr ::ULONG k_max_iov = 16;
