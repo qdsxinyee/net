@@ -112,7 +112,7 @@ struct beman::net::detail::sender_state : Desc::operation, ::beman::net::detail:
         // On Windows, non-blocking sockets (e.g. accepted sockets marked via
         // set_nonblocking()) cause add_outstanding() to invoke work() inline.
         // If work() completes synchronously, it calls complete()/error()/cancel()
-        // internally, which decrements d_outstanding and resumes the coroutine —
+        // internally, which decrements d_outstanding and resumes the coroutine -
         // potentially destroying `this` before submit() returns.
         // Calling this->complete() again after that would be a use-after-free.
         // On Windows we therefore never touch `this` after submit().
