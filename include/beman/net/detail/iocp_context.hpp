@@ -126,7 +126,7 @@ struct beman::net::detail::iocp_context final : ::beman::net::detail::context_ba
     using timer_priority_t = ::beman::net::detail::sorted_list<timer_node_t, ::std::less<>, get_time>;
 
     // ------------------------------------------------------------------
-    // RAII Winsock initialisation
+    // RAII Winsock initialization
     // ------------------------------------------------------------------
     struct wsa_guard {
         wsa_guard() {

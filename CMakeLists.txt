@@ -26,7 +26,11 @@ if(LINUX)
 endif()
 
 if(WIN32)
-    option(BEMAN_NET_WITH_IOCP "Enable IOCP io context (Windows only). Default: OFF. Values: { ON, OFF }." OFF)
+    option(
+        BEMAN_NET_WITH_IOCP
+        "Enable IOCP io context (Windows only). Default: OFF. Values: { ON, OFF }."
+        OFF
+    )
 endif()
 
 include(FetchContent)

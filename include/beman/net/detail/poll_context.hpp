@@ -33,7 +33,7 @@ struct beman::net::detail::poll_record final {
 
 struct beman::net::detail::poll_context final : ::beman::net::detail::context_base {
 #ifdef _MSC_VER
-    // On Windows, Winsock must be initialised before any socket call.
+    // On Windows, Winsock must be initialized before any socket call.
     // This RAII guard calls WSAStartup on construction and WSACleanup on
     // destruction, tying the Winsock lifetime to the poll_context object.
     struct wsa_guard {
