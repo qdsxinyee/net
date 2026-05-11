@@ -108,9 +108,22 @@ struct beman::net::detail::sender_state : Desc::operation, ::beman::net::detail:
             this->cancel();
             return;
         }
+#ifdef _MSC_VER
+        // On Windows, non-blocking sockets (e.g. accepted sockets marked via
+        // set_nonblocking()) cause add_outstanding() to invoke work() inline.
+        // If work() completes synchronously, it calls complete()/error()/cancel()
+        // internally, which decrements d_outstanding and resumes the coroutine —
+        // potentially destroying `this` before submit() returns.
+        // Calling this->complete() again after that would be a use-after-free.
+        // On Windows we therefore never touch `this` after submit().
+        this->d_data.submit(this);
+#else
+
         if (this->d_data.submit(this) == ::beman::net::detail::submit_result::ready) {
             this->complete();
         }
+
+#endif
     }
     auto complete() -> void override final {
         if (0 == --this->d_outstanding) {
