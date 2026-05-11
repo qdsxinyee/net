@@ -29,7 +29,7 @@ include(FetchContent)
 
 FetchContent_Declare(
     task
-    # SOURCE_DIR ${CMAKE_SOURCE_DIR}/../task
+    #SOURCE_DIR ${CMAKE_SOURCE_DIR}/../task
     GIT_REPOSITORY https://github.com/bemanproject/task
     GIT_TAG 1679185
     FIND_PACKAGE_ARGS 0.2.0 EXACT NAMES beman.task COMPONENTS task_headers
