@@ -25,9 +25,7 @@
 #include <csignal>
 #include <limits>
 #include <system_error>
-#ifndef _MSC_VER
-#include <csignal>
-#endif
+
 // ----------------------------------------------------------------------------
 
 namespace beman::net {
