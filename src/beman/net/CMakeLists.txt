@@ -90,12 +90,7 @@ endif()
 if(WIN32)
     # Always link ws2_32 on Windows: even the poll backend needs WinSock2.
     # mswsock provides AcceptEx, ConnectEx, WSARecvMsg, WSASendMsg.
-    target_link_libraries(
-        ${PROJECT_NAME}_headers
-        INTERFACE
-            ws2_32
-            mswsock
-    )
+    target_link_libraries(${PROJECT_NAME}_headers INTERFACE ws2_32 mswsock)
     if(BEMAN_NET_WITH_IOCP)
         target_compile_definitions(
             ${PROJECT_NAME}_headers
